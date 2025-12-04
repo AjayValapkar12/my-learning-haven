@@ -205,12 +205,12 @@ export function EntryForm({ entry, onSubmit, isSubmitting, onDelete }: EntryForm
       <div className="space-y-2">
         <Label className="text-foreground font-medium">Topic</Label>
         <div className="flex gap-2">
-          <Select value={topicId || ''} onValueChange={(v) => setTopicId(v || null)}>
+          <Select value={topicId || "none"} onValueChange={(v) => setTopicId(v === "none" ? null : v)}>
             <SelectTrigger className="flex-1 h-11 bg-secondary/50 border-border rounded-xl">
               <SelectValue placeholder="Select a topic" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">No topic</SelectItem>
+              <SelectItem value="none">No topic</SelectItem>
               {topics?.map((topic) => (
                 <SelectItem key={topic.id} value={topic.id}>
                   {topic.name}

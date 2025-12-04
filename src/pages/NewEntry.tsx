@@ -1,23 +1,38 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import { EntryForm } from '@/components/entries/EntryForm';
 import { useCreateEntry } from '@/hooks/useLearningEntries';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 
 export default function NewEntry() {
   const navigate = useNavigate();
+  const { user, loading } = useAuth();
   const createEntry = useCreateEntry();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
 
   const handleSubmit = async (data: Parameters<typeof createEntry.mutateAsync>[0]) => {
     try {
       const entry = await createEntry.mutateAsync(data);
       toast.success('Entry created successfully!');
       navigate(`/entry/${entry.id}`);
-    } catch (error) {
-      toast.error('Failed to create entry');
+    } catch (error: any) {
+      console.error('Failed to create entry:', error);
+      toast.error(error?.message || 'Failed to create entry');
     }
   };
 

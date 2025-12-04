@@ -1,6 +1,7 @@
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, Navigate } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import { useLearningEntry, useDeleteEntry } from '@/hooks/useLearningEntries';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
@@ -16,7 +17,8 @@ import {
   Folder, 
   Link as LinkIcon,
   ExternalLink,
-  Trash2
+  Trash2,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -57,8 +59,21 @@ const statusConfig = {
 export default function ViewEntry() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const { data: entry, isLoading } = useLearningEntry(id);
   const deleteEntry = useDeleteEntry();
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
 
   const handleDelete = async () => {
     if (!id) return;
@@ -66,8 +81,9 @@ export default function ViewEntry() {
       await deleteEntry.mutateAsync(id);
       toast.success('Entry deleted');
       navigate('/');
-    } catch (error) {
-      toast.error('Failed to delete entry');
+    } catch (error: any) {
+      console.error('Failed to delete entry:', error);
+      toast.error(error?.message || 'Failed to delete entry');
     }
   };
 
@@ -177,7 +193,7 @@ export default function ViewEntry() {
 
             {/* Summary */}
             {entry.summary && (
-              <div className="mb-6 p-4 bg-sage-light/30 rounded-xl border border-sage/10">
+              <div className="mb-6 p-4 bg-secondary/50 rounded-xl border border-border/50">
                 <p className="text-foreground italic">{entry.summary}</p>
               </div>
             )}
@@ -185,7 +201,7 @@ export default function ViewEntry() {
             {/* Topic & Tags */}
             <div className="flex flex-wrap gap-2 mb-6">
               {entry.topic && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sage-light text-sage text-sm">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-sm">
                   <Folder className="w-3.5 h-3.5" />
                   {entry.topic.name}
                 </span>
@@ -214,7 +230,7 @@ export default function ViewEntry() {
             {entry.reference_links && entry.reference_links.length > 0 && (
               <div className="pt-6 border-t border-border">
                 <h2 className="font-medium text-foreground mb-3 flex items-center gap-2">
-                  <LinkIcon className="w-4 h-4 text-sage" />
+                  <LinkIcon className="w-4 h-4 text-primary" />
                   References
                 </h2>
                 <ul className="space-y-2">
@@ -224,7 +240,7 @@ export default function ViewEntry() {
                         href={link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 text-sage hover:underline"
+                        className="inline-flex items-center gap-2 text-primary hover:underline"
                       >
                         <span className="truncate max-w-md">{link}</span>
                         <ExternalLink className="w-3 h-3 shrink-0" />

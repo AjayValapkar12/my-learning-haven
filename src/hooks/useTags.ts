@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tag } from '@/types/learning';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 export function useTags() {
   const { user } = useAuth();
@@ -17,7 +18,10 @@ export function useTags() {
         .eq('user_id', user.id)
         .order('name');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching tags:', error);
+        throw error;
+      }
       return data as Tag[];
     },
     enabled: !!user,
@@ -32,6 +36,8 @@ export function useCreateTag() {
     mutationFn: async (name: string) => {
       if (!user) throw new Error('Not authenticated');
 
+      console.log('Creating tag:', name);
+
       const { data: tag, error } = await supabase
         .from('tags')
         .insert({
@@ -41,11 +47,20 @@ export function useCreateTag() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error creating tag:', error);
+        throw error;
+      }
+      
+      console.log('Tag created:', tag);
       return tag;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tags'] });
+    },
+    onError: (error: any) => {
+      console.error('Tag creation error:', error);
+      toast.error(error.message || 'Failed to create tag');
     },
   });
 }
@@ -60,10 +75,16 @@ export function useDeleteTag() {
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting tag:', error);
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tags'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to delete tag');
     },
   });
 }

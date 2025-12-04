@@ -1,11 +1,12 @@
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, Navigate } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import { EntryForm } from '@/components/entries/EntryForm';
 import { useLearningEntry, useUpdateEntry, useDeleteEntry } from '@/hooks/useLearningEntries';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,21 +18,35 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useState } from 'react';
+import { EntryStatus } from '@/types/learning';
 
 export default function EditEntry() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const { data: entry, isLoading } = useLearningEntry(id);
   const updateEntry = useUpdateEntry();
   const deleteEntry = useDeleteEntry();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
 
   const handleSubmit = async (data: {
     title: string;
     content: string;
     summary: string;
     topic_id: string | null;
-    status: any;
+    status: EntryStatus;
     reference_links: string[];
     tagIds: string[];
   }) => {
@@ -40,8 +55,9 @@ export default function EditEntry() {
       await updateEntry.mutateAsync({ id, ...data });
       toast.success('Entry updated!');
       navigate(`/entry/${id}`);
-    } catch (error) {
-      toast.error('Failed to update entry');
+    } catch (error: any) {
+      console.error('Failed to update entry:', error);
+      toast.error(error?.message || 'Failed to update entry');
     }
   };
 
@@ -51,8 +67,9 @@ export default function EditEntry() {
       await deleteEntry.mutateAsync(id);
       toast.success('Entry deleted');
       navigate('/');
-    } catch (error) {
-      toast.error('Failed to delete entry');
+    } catch (error: any) {
+      console.error('Failed to delete entry:', error);
+      toast.error(error?.message || 'Failed to delete entry');
     }
   };
 
