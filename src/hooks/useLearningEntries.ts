@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { LearningEntry, EntryStatus, Tag } from '@/types/learning';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 export function useLearningEntries(searchQuery?: string, statusFilter?: EntryStatus | 'all') {
   const { user } = useAuth();
@@ -30,7 +31,10 @@ export function useLearningEntries(searchQuery?: string, statusFilter?: EntrySta
 
       const { data, error } = await query;
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching entries:', error);
+        throw error;
+      }
 
       // Fetch tags for each entry
       const entriesWithTags = await Promise.all(
@@ -42,7 +46,7 @@ export function useLearningEntries(searchQuery?: string, statusFilter?: EntrySta
 
           return {
             ...entry,
-            tags: tagData?.map((t: any) => t.tags) || []
+            tags: tagData?.map((t: any) => t.tags).filter(Boolean) || []
           } as LearningEntry;
         })
       );
@@ -71,7 +75,10 @@ export function useLearningEntry(id: string | undefined) {
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching entry:', error);
+        throw error;
+      }
       if (!data) return null;
 
       const { data: tagData } = await supabase
@@ -81,7 +88,7 @@ export function useLearningEntry(id: string | undefined) {
 
       return {
         ...data,
-        tags: tagData?.map((t: any) => t.tags) || []
+        tags: tagData?.map((t: any) => t.tags).filter(Boolean) || []
       } as LearningEntry;
     },
     enabled: !!id && !!user,
@@ -97,28 +104,35 @@ export function useCreateEntry() {
       title: string;
       content?: string;
       summary?: string;
-      topic_id?: string;
+      topic_id?: string | null;
       status?: EntryStatus;
       reference_links?: string[];
       tagIds?: string[];
     }) => {
       if (!user) throw new Error('Not authenticated');
 
+      console.log('Creating entry with data:', data);
+
       const { data: entry, error } = await supabase
         .from('learning_entries')
         .insert({
           user_id: user.id,
           title: data.title,
-          content: data.content,
-          summary: data.summary,
-          topic_id: data.topic_id,
+          content: data.content || null,
+          summary: data.summary || null,
+          topic_id: data.topic_id || null,
           status: data.status || 'active',
-          reference_links: data.reference_links,
+          reference_links: data.reference_links?.length ? data.reference_links : null,
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error creating entry:', error);
+        throw error;
+      }
+
+      console.log('Entry created:', entry);
 
       if (data.tagIds && data.tagIds.length > 0) {
         const { error: tagError } = await supabase
@@ -127,13 +141,19 @@ export function useCreateEntry() {
             entry_id: entry.id,
             tag_id: tagId
           })));
-        if (tagError) throw tagError;
+        if (tagError) {
+          console.error('Error adding tags:', tagError);
+        }
       }
 
       return entry;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['learning-entries'] });
+    },
+    onError: (error: any) => {
+      console.error('Mutation error:', error);
+      toast.error(error.message || 'Failed to create entry');
     },
   });
 }
@@ -152,23 +172,31 @@ export function useUpdateEntry() {
       reference_links?: string[];
       tagIds?: string[];
     }) => {
+      console.log('Updating entry:', id, data);
+
+      const updateData: any = {};
+      if (data.title !== undefined) updateData.title = data.title;
+      if (data.content !== undefined) updateData.content = data.content || null;
+      if (data.summary !== undefined) updateData.summary = data.summary || null;
+      if (data.topic_id !== undefined) updateData.topic_id = data.topic_id;
+      if (data.status !== undefined) updateData.status = data.status;
+      if (data.reference_links !== undefined) updateData.reference_links = data.reference_links?.length ? data.reference_links : null;
+
       const { error } = await supabase
         .from('learning_entries')
-        .update({
-          title: data.title,
-          content: data.content,
-          summary: data.summary,
-          topic_id: data.topic_id,
-          status: data.status,
-          reference_links: data.reference_links,
-        })
+        .update(updateData)
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating entry:', error);
+        throw error;
+      }
 
       if (data.tagIds !== undefined) {
+        // Remove existing tags
         await supabase.from('entry_tags').delete().eq('entry_id', id);
         
+        // Add new tags
         if (data.tagIds.length > 0) {
           const { error: tagError } = await supabase
             .from('entry_tags')
@@ -176,13 +204,19 @@ export function useUpdateEntry() {
               entry_id: id,
               tag_id: tagId
             })));
-          if (tagError) throw tagError;
+          if (tagError) {
+            console.error('Error updating tags:', tagError);
+          }
         }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['learning-entries'] });
       queryClient.invalidateQueries({ queryKey: ['learning-entry'] });
+    },
+    onError: (error: any) => {
+      console.error('Update error:', error);
+      toast.error(error.message || 'Failed to update entry');
     },
   });
 }
@@ -192,15 +226,24 @@ export function useDeleteEntry() {
 
   return useMutation({
     mutationFn: async (id: string) => {
+      console.log('Deleting entry:', id);
+
       const { error } = await supabase
         .from('learning_entries')
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting entry:', error);
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['learning-entries'] });
+    },
+    onError: (error: any) => {
+      console.error('Delete error:', error);
+      toast.error(error.message || 'Failed to delete entry');
     },
   });
 }
