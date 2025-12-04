@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +15,7 @@ import { useTopics, useCreateTopic } from '@/hooks/useTopics';
 import { useTags, useCreateTag } from '@/hooks/useTags';
 import { LearningEntry, EntryStatus, Tag } from '@/types/learning';
 import { toast } from 'sonner';
-import { Plus, X, Link as LinkIcon, Trash2, Star, Clock, CheckCircle2, Circle } from 'lucide-react';
+import { Plus, X, Link as LinkIcon, Trash2, Star, Clock, CheckCircle2, Circle, Mic, MicOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const statusOptions = [
@@ -47,6 +47,7 @@ export function EntryForm({ entry, onSubmit, isSubmitting, onDelete }: EntryForm
   const createTopic = useCreateTopic();
   const createTag = useCreateTag();
 
+  // Form states
   const [title, setTitle] = useState(entry?.title || '');
   const [content, setContent] = useState(entry?.content || '');
   const [summary, setSummary] = useState(entry?.summary || '');
@@ -57,6 +58,11 @@ export function EntryForm({ entry, onSubmit, isSubmitting, onDelete }: EntryForm
   const [newLink, setNewLink] = useState('');
   const [newTag, setNewTag] = useState('');
   const [newTopic, setNewTopic] = useState('');
+
+  // Speech recognition
+  const recognitionRef = useRef<any>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [interimText, setInterimText] = useState('');
 
   useEffect(() => {
     if (entry) {
@@ -70,10 +76,85 @@ export function EntryForm({ entry, onSubmit, isSubmitting, onDelete }: EntryForm
     }
   }, [entry]);
 
+  // -------------------------
+  // FULLY STABLE SPEECH RECOGNITION
+  // -------------------------
+  useEffect(() => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      toast.error("Voice recognition not supported in your browser.");
+      return;
+    }
+
+    const recog = new SpeechRecognition();
+    recog.continuous = true;
+    recog.interimResults = true;
+    recog.lang = "en-US";
+
+    recog.onstart = () => {
+      setIsListening(true);
+    };
+
+    recog.onerror = (e: any) => {
+      console.log("Speech error:", e.error);
+      toast.error("Voice recognition error occurred");
+      setIsListening(false);
+    };
+
+    recog.onend = () => {
+      setIsListening(false);
+    };
+
+    recog.onresult = (event: any) => {
+      let finalText = "";
+      let interim = "";
+
+      for (let i = 0; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+
+        if (event.results[i].isFinal) {
+          finalText += transcript + " ";
+        } else {
+          interim += transcript;
+        }
+      }
+
+      setInterimText(interim);
+
+      if (finalText.trim().length > 0) {
+        setContent((prev) => (prev + " " + finalText).trim());
+      }
+    };
+
+    recognitionRef.current = recog;
+  }, []);
+
+  const startListening = () => {
+    try {
+      recognitionRef.current.start();
+      toast.message("Listening…");
+    } catch {
+      toast.error("Unable to start voice recognition");
+    }
+  };
+
+  const stopListening = () => {
+    try {
+      recognitionRef.current.stop();
+      toast.message("Stopped");
+      setInterimText("");
+    } catch {
+      toast.error("Unable to stop voice recognition");
+    }
+  };
+
+  // Submit Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      toast.error('Please enter a title');
+      toast.error("Please enter a title");
       return;
     }
 
@@ -88,6 +169,7 @@ export function EntryForm({ entry, onSubmit, isSubmitting, onDelete }: EntryForm
     });
   };
 
+  // Links
   const addLink = () => {
     if (newLink.trim()) {
       setReferenceLinks([...referenceLinks, newLink.trim()]);
@@ -99,6 +181,7 @@ export function EntryForm({ entry, onSubmit, isSubmitting, onDelete }: EntryForm
     setReferenceLinks(referenceLinks.filter((_, i) => i !== index));
   };
 
+  // Tags
   const handleAddTag = async () => {
     const tagName = newTag.toLowerCase().trim();
     if (!tagName) return;
@@ -112,7 +195,7 @@ export function EntryForm({ entry, onSubmit, isSubmitting, onDelete }: EntryForm
       try {
         const created = await createTag.mutateAsync(tagName);
         setSelectedTags([...selectedTags, created]);
-      } catch (err) {
+      } catch {
         toast.error('Failed to create tag');
       }
     }
@@ -123,6 +206,7 @@ export function EntryForm({ entry, onSubmit, isSubmitting, onDelete }: EntryForm
     setSelectedTags(selectedTags.filter((t) => t.id !== tagId));
   };
 
+  // Topic
   const handleAddTopic = async () => {
     if (!newTopic.trim()) return;
     try {
@@ -130,23 +214,38 @@ export function EntryForm({ entry, onSubmit, isSubmitting, onDelete }: EntryForm
       setTopicId(created.id);
       setNewTopic('');
       toast.success('Topic created');
-    } catch (err) {
+    } catch {
       toast.error('Failed to create topic');
     }
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Title */}
+      
+      {/* Notes with mic */}
       <div className="space-y-2">
-        <Label htmlFor="title" className="text-foreground font-medium">Title</Label>
-        <Input
-          id="title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="What did you learn?"
-          className="h-12 text-lg font-serif bg-secondary/50 border-border rounded-xl"
-          required
+        <div className="flex items-center justify-between">
+          <Label htmlFor="content" className="text-foreground font-medium">Notes</Label>
+
+          <button
+            type="button"
+            onClick={isListening ? stopListening : startListening}
+            className="p-2 rounded-lg bg-secondary hover:bg-sage-light transition"
+          >
+            {isListening ? (
+              <MicOff className="w-5 h-5 text-red-500" />
+            ) : (
+              <Mic className="w-5 h-5 text-sage" />
+            )}
+          </button>
+        </div>
+
+        <Textarea
+          id="content"
+          value={`${content}${interimText ? " " + interimText : ""}`}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder="Write your detailed notes here... (Markdown supported)"
+          className="min-h-[200px] bg-secondary/50 border-border rounded-xl resize-y"
         />
       </div>
 
@@ -162,15 +261,16 @@ export function EntryForm({ entry, onSubmit, isSubmitting, onDelete }: EntryForm
         />
       </div>
 
-      {/* Content */}
+      {/* Title */}
       <div className="space-y-2">
-        <Label htmlFor="content" className="text-foreground font-medium">Notes</Label>
-        <Textarea
-          id="content"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Write your detailed notes here... (Markdown supported)"
-          className="min-h-[200px] bg-secondary/50 border-border rounded-xl resize-y"
+        <Label htmlFor="title" className="text-foreground font-medium">Title</Label>
+        <Input
+          id="title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="What did you learn?"
+          className="h-12 text-lg font-serif bg-secondary/50 border-border rounded-xl"
+          required
         />
       </div>
 
@@ -261,23 +361,6 @@ export function EntryForm({ entry, onSubmit, isSubmitting, onDelete }: EntryForm
             Add
           </Button>
         </div>
-        {allTags && allTags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2">
-            {allTags
-              .filter((t) => !selectedTags.find((st) => st.id === t.id))
-              .slice(0, 10)
-              .map((tag) => (
-                <button
-                  key={tag.id}
-                  type="button"
-                  onClick={() => setSelectedTags([...selectedTags, tag])}
-                  className="px-2 py-1 text-xs rounded-md bg-secondary hover:bg-sage-light transition-colors text-muted-foreground hover:text-sage"
-                >
-                  {tag.name}
-                </button>
-              ))}
-          </div>
-        )}
       </div>
 
       {/* Reference Links */}
@@ -315,14 +398,13 @@ export function EntryForm({ entry, onSubmit, isSubmitting, onDelete }: EntryForm
 
       {/* Actions */}
       <div className="flex items-center justify-between pt-4 border-t border-border">
-        <div className="flex gap-2">
-          {onDelete && (
-            <Button type="button" variant="ghost" onClick={onDelete} className="text-destructive hover:text-destructive">
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete
-            </Button>
-          )}
-        </div>
+        {onDelete && (
+          <Button type="button" variant="ghost" onClick={onDelete} className="text-destructive hover:text-destructive">
+            <Trash2 className="w-4 h-4 mr-2" />
+            Delete
+          </Button>
+        )}
+
         <div className="flex gap-2">
           <Button type="button" variant="secondary" onClick={() => navigate(-1)}>
             Cancel
