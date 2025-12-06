@@ -91,6 +91,30 @@ export type Database = {
           },
         ]
       }
+      learning_streaks: {
+        Row: {
+          created_at: string
+          date: string
+          entries_count: number
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          entries_count?: number
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          entries_count?: number
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -112,6 +136,33 @@ export type Database = {
           display_name?: string | null
           id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          user_id?: string
         }
         Relationships: []
       }
