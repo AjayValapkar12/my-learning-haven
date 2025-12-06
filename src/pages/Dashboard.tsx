@@ -3,16 +3,21 @@ import { Header } from '@/components/layout/Header';
 import { EntryCard } from '@/components/entries/EntryCard';
 import { EntryFilters } from '@/components/entries/EntryFilters';
 import { EmptyState } from '@/components/entries/EmptyState';
+import { StreakCard } from '@/components/streak/StreakCard';
+import { NotificationToggle } from '@/components/streak/NotificationToggle';
+import { AIAssistantPanel } from '@/components/ai/AIAssistantPanel';
 import { useLearningEntries } from '@/hooks/useLearningEntries';
 import { useTopics } from '@/hooks/useTopics';
 import { EntryStatus } from '@/types/learning';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Folder, BookOpen } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Folder, BookOpen, Brain, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<EntryStatus | 'all'>('all');
+  const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
   
   const { data: entries, isLoading } = useLearningEntries(searchQuery, statusFilter);
   const { data: topics } = useTopics();
@@ -24,22 +29,41 @@ export default function Dashboard() {
       <Header />
       
       <main className="container mx-auto px-4 py-8">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-6xl mx-auto">
           {/* Hero Section */}
           <div className="mb-8 animate-fade-in">
-            <h1 className="text-3xl md:text-4xl font-serif text-foreground mb-2">
-              Your Learning Journal
-            </h1>
-            <p className="text-muted-foreground">
-              {entries?.length 
-                ? `${entries.length} entries captured`
-                : 'Start capturing your knowledge'}
-            </p>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <h1 className="text-3xl md:text-4xl font-serif text-foreground mb-2">
+                  Your Learning Journal
+                </h1>
+                <p className="text-muted-foreground">
+                  {entries?.length 
+                    ? `${entries.length} entries captured`
+                    : 'Start capturing your knowledge'}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <NotificationToggle />
+                <Button 
+                  onClick={() => setIsAIPanelOpen(true)}
+                  className="gap-2 bg-gradient-to-r from-primary to-sage hover:opacity-90"
+                >
+                  <Brain className="w-4 h-4" />
+                  AI Assistant
+                  <Sparkles className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            {/* Sidebar - Topics */}
+            {/* Sidebar - Topics & Stats */}
             <aside className="lg:col-span-1 space-y-6">
+              {/* Streak Card */}
+              <StreakCard />
+
+              {/* Topics */}
               <div className="card-warm p-5">
                 <h2 className="font-medium text-foreground mb-4 flex items-center gap-2">
                   <Folder className="w-4 h-4 text-sage" />
@@ -129,6 +153,9 @@ export default function Dashboard() {
           </div>
         </div>
       </main>
+
+      {/* AI Assistant Panel */}
+      <AIAssistantPanel isOpen={isAIPanelOpen} onClose={() => setIsAIPanelOpen(false)} />
     </div>
   );
 }
