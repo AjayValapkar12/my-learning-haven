@@ -8,7 +8,12 @@ import { Badge } from '@/components/ui/badge';
 import { useAIAssistant } from '@/hooks/useAIAssistant';
 import { useLearningEntries } from '@/hooks/useLearningEntries';
 import { useTopics } from '@/hooks/useTopics';
-import { Sparkles, Search, GraduationCap, Lightbulb, Loader2, X, Brain, BookOpen, AlertCircle, ChevronDown, ChevronUp, CheckCircle2, Target, MessageSquare, Zap } from 'lucide-react';
+import { useFavoriteQuestions } from '@/hooks/useFavoriteQuestions';
+import { 
+  Sparkles, Search, GraduationCap, Lightbulb, Loader2, X, Brain, BookOpen, 
+  AlertCircle, ChevronDown, ChevronUp, CheckCircle2, Target, MessageSquare, 
+  Zap, Heart, Star, Trash2 
+} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 interface AIAssistantPanelProps {
@@ -37,9 +42,11 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [interviewTopic, setInterviewTopic] = useState('');
   const [expandedQuestions, setExpandedQuestions] = useState<Set<number>>(new Set());
+  const [activeTab, setActiveTab] = useState('interview');
   const { data: entries = [] } = useLearningEntries();
   const { data: topics = [] } = useTopics();
   const { isLoading, response, error, smartSearch, getInterviewPrep, getInsights, reset } = useAIAssistant({ entries });
+  const { favorites, addFavorite, removeFavorite, isFavorite, getFavoriteId, isLoading: favoritesLoading } = useFavoriteQuestions();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,15 +79,41 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
     });
   };
 
+  const handleToggleFavorite = (q: InterviewQuestion, sourceTopic?: string) => {
+    if (isFavorite(q.question)) {
+      const favId = getFavoriteId(q.question);
+      if (favId) {
+        removeFavorite.mutate(favId);
+      }
+    } else {
+      addFavorite.mutate({
+        question: q.question,
+        difficulty: q.difficulty,
+        category: q.category,
+        whyAsked: q.whyAsked,
+        sampleAnswer: q.sampleAnswer,
+        keyPoints: q.keyPoints,
+        followUp: q.followUp,
+        sourceTopic: sourceTopic || interviewTopic,
+      });
+    }
+  };
+
   const parsedInterviewResponse = useMemo((): InterviewResponse | null => {
     if (!response) return null;
     try {
+      // Try to extract JSON from the response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch[0]);
+        // Validate the structure
+        if (parsed.questions && Array.isArray(parsed.questions)) {
+          return parsed;
+        }
       }
       return null;
-    } catch {
+    } catch (e) {
+      console.log('JSON parse error, response may still be streaming:', e);
       return null;
     }
   }, [response]);
@@ -105,6 +138,129 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
       case 'system design': return <Target className="w-3 h-3" />;
       default: return <Brain className="w-3 h-3" />;
     }
+  };
+
+  const renderQuestionCard = (q: InterviewQuestion, sourceTopic?: string, isFav = false) => {
+    const isExpanded = expandedQuestions.has(q.id);
+    const favorited = isFavorite(q.question);
+
+    return (
+      <Card 
+        key={q.id} 
+        className="overflow-hidden border-border/50 hover:border-border transition-colors"
+      >
+        <div className="w-full p-4 text-left flex items-start gap-3">
+          <div className="flex-shrink-0 mt-0.5">
+            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
+              {q.id}
+            </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <Badge variant="outline" className={`text-[10px] ${getDifficultyColor(q.difficulty)}`}>
+                {q.difficulty.toUpperCase()}
+              </Badge>
+              <Badge variant="outline" className="text-[10px] flex items-center gap-1">
+                {getCategoryIcon(q.category)}
+                {q.category}
+              </Badge>
+              {sourceTopic && (
+                <Badge variant="secondary" className="text-[10px]">
+                  {sourceTopic}
+                </Badge>
+              )}
+            </div>
+            <p className="font-medium text-foreground text-sm leading-relaxed">
+              {q.question}
+            </p>
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleFavorite(q, sourceTopic);
+              }}
+            >
+              <Heart 
+                className={`w-4 h-4 transition-colors ${favorited ? 'fill-red-500 text-red-500' : 'text-muted-foreground hover:text-red-500'}`} 
+              />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => toggleQuestion(q.id)}
+            >
+              {isExpanded ? (
+                <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              )}
+            </Button>
+          </div>
+        </div>
+        
+        {isExpanded && (
+          <div className="px-4 pb-4 pt-0 border-t border-border/50 bg-muted/20">
+            <div className="pl-9 space-y-4 pt-4">
+              {/* Why Asked */}
+              {q.whyAsked && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                    Why Interviewers Ask This
+                  </p>
+                  <p className="text-sm text-foreground/80">{q.whyAsked}</p>
+                </div>
+              )}
+              
+              {/* Sample Answer */}
+              {q.sampleAnswer && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                    Sample Answer
+                  </p>
+                  <div className="bg-background/50 rounded-lg p-3 border border-border/50">
+                    <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-line">
+                      {q.sampleAnswer}
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Key Points */}
+              {q.keyPoints?.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                    Key Points to Remember
+                  </p>
+                  <ul className="space-y-1.5">
+                    {q.keyPoints.map((point, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm">
+                        <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+                        <span className="text-foreground/80">{point}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {/* Follow-up */}
+              {q.followUp && (
+                <div className="bg-amber-500/5 rounded-lg p-3 border border-amber-500/20">
+                  <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-1">
+                    Possible Follow-up
+                  </p>
+                  <p className="text-sm text-foreground/80">{q.followUp}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Card>
+    );
   };
 
   return (
@@ -143,12 +299,11 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
               </Card>
             </div>
           ) : (
-            <Tabs defaultValue="interview" className="flex-1 flex flex-col overflow-hidden">
+            <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); reset(); }} className="flex-1 flex flex-col overflow-hidden">
               <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent p-0 h-auto flex-shrink-0">
                 <TabsTrigger 
                   value="search" 
                   className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-4"
-                  onClick={reset}
                 >
                   <Search className="w-4 h-4 mr-2" />
                   Smart Search
@@ -156,15 +311,25 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                 <TabsTrigger 
                   value="interview" 
                   className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-4"
-                  onClick={reset}
                 >
                   <GraduationCap className="w-4 h-4 mr-2" />
                   Interview Prep
                 </TabsTrigger>
                 <TabsTrigger 
+                  value="favorites" 
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-4"
+                >
+                  <Star className="w-4 h-4 mr-2" />
+                  Favorites
+                  {favorites.length > 0 && (
+                    <Badge variant="secondary" className="ml-2 text-[10px] h-5">
+                      {favorites.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger 
                   value="insights" 
                   className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-4"
-                  onClick={reset}
                 >
                   <Lightbulb className="w-4 h-4 mr-2" />
                   Insights
@@ -172,6 +337,7 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
               </TabsList>
 
               <div className="flex-1 overflow-hidden">
+                {/* Search Tab */}
                 <TabsContent value="search" className="h-full m-0 p-4 flex flex-col">
                   <form onSubmit={handleSearch} className="flex gap-2 mb-4 flex-shrink-0">
                     <Input
@@ -187,6 +353,7 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                   <AIResponseArea response={response} error={error} isLoading={isLoading} type="search" />
                 </TabsContent>
 
+                {/* Interview Prep Tab */}
                 <TabsContent value="interview" className="h-full m-0 flex flex-col overflow-hidden">
                   <div className="p-4 border-b border-border flex-shrink-0 space-y-4">
                     <div>
@@ -254,7 +421,7 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                       </Card>
                     )}
                     
-                    {isLoading && !parsedInterviewResponse && (
+                    {isLoading && (
                       <Card className="p-6 bg-secondary/30">
                         <div className="flex items-center gap-3 text-muted-foreground">
                           <Loader2 className="w-5 h-5 animate-spin" />
@@ -263,10 +430,15 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                             <p className="text-xs">Analyzing your learning entries</p>
                           </div>
                         </div>
+                        {response && (
+                          <div className="mt-4 text-xs text-muted-foreground/70 font-mono max-h-20 overflow-hidden">
+                            {response.substring(0, 200)}...
+                          </div>
+                        )}
                       </Card>
                     )}
                     
-                    {parsedInterviewResponse && (
+                    {parsedInterviewResponse && !isLoading && (
                       <div className="space-y-4">
                         {/* Topics & Tips Summary */}
                         {parsedInterviewResponse.topicsIdentified?.length > 0 && (
@@ -281,97 +453,7 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                         
                         {/* Questions */}
                         <div className="space-y-3">
-                          {parsedInterviewResponse.questions.map((q) => (
-                            <Card 
-                              key={q.id} 
-                              className="overflow-hidden border-border/50 hover:border-border transition-colors"
-                            >
-                              <button
-                                onClick={() => toggleQuestion(q.id)}
-                                className="w-full p-4 text-left flex items-start gap-3 hover:bg-muted/30 transition-colors"
-                              >
-                                <div className="flex-shrink-0 mt-0.5">
-                                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
-                                    {q.id}
-                                  </div>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                    <Badge variant="outline" className={`text-[10px] ${getDifficultyColor(q.difficulty)}`}>
-                                      {q.difficulty.toUpperCase()}
-                                    </Badge>
-                                    <Badge variant="outline" className="text-[10px] flex items-center gap-1">
-                                      {getCategoryIcon(q.category)}
-                                      {q.category}
-                                    </Badge>
-                                  </div>
-                                  <p className="font-medium text-foreground text-sm leading-relaxed">
-                                    {q.question}
-                                  </p>
-                                </div>
-                                <div className="flex-shrink-0">
-                                  {expandedQuestions.has(q.id) ? (
-                                    <ChevronUp className="w-5 h-5 text-muted-foreground" />
-                                  ) : (
-                                    <ChevronDown className="w-5 h-5 text-muted-foreground" />
-                                  )}
-                                </div>
-                              </button>
-                              
-                              {expandedQuestions.has(q.id) && (
-                                <div className="px-4 pb-4 pt-0 border-t border-border/50 bg-muted/20">
-                                  <div className="pl-9 space-y-4 pt-4">
-                                    {/* Why Asked */}
-                                    <div>
-                                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-                                        Why Interviewers Ask This
-                                      </p>
-                                      <p className="text-sm text-foreground/80">{q.whyAsked}</p>
-                                    </div>
-                                    
-                                    {/* Sample Answer */}
-                                    <div>
-                                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                                        Sample Answer
-                                      </p>
-                                      <div className="bg-background/50 rounded-lg p-3 border border-border/50">
-                                        <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-line">
-                                          {q.sampleAnswer}
-                                        </p>
-                                      </div>
-                                    </div>
-                                    
-                                    {/* Key Points */}
-                                    {q.keyPoints?.length > 0 && (
-                                      <div>
-                                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                                          Key Points to Remember
-                                        </p>
-                                        <ul className="space-y-1.5">
-                                          {q.keyPoints.map((point, idx) => (
-                                            <li key={idx} className="flex items-start gap-2 text-sm">
-                                              <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                                              <span className="text-foreground/80">{point}</span>
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      </div>
-                                    )}
-                                    
-                                    {/* Follow-up */}
-                                    {q.followUp && (
-                                      <div className="bg-amber-500/5 rounded-lg p-3 border border-amber-500/20">
-                                        <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-1">
-                                          Possible Follow-up
-                                        </p>
-                                        <p className="text-sm text-foreground/80">{q.followUp}</p>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </Card>
-                          ))}
+                          {parsedInterviewResponse.questions.map((q) => renderQuestionCard(q, interviewTopic))}
                         </div>
                         
                         {/* Study Tips */}
@@ -394,7 +476,7 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                       </div>
                     )}
                     
-                    {/* Fallback to markdown if JSON parsing fails */}
+                    {/* Fallback to markdown if JSON parsing fails and not loading */}
                     {response && !parsedInterviewResponse && !isLoading && (
                       <Card className="p-5 bg-secondary/30">
                         <div className="prose prose-sm max-w-none dark:prose-invert">
@@ -405,6 +487,63 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                   </ScrollArea>
                 </TabsContent>
 
+                {/* Favorites Tab */}
+                <TabsContent value="favorites" className="h-full m-0 flex flex-col overflow-hidden">
+                  <div className="p-4 border-b border-border flex-shrink-0">
+                    <p className="text-sm text-muted-foreground">
+                      Your saved interview questions for quick reference and practice.
+                    </p>
+                  </div>
+                  
+                  <ScrollArea className="flex-1 p-4">
+                    {favoritesLoading ? (
+                      <Card className="p-6 bg-secondary/30">
+                        <div className="flex items-center gap-3 text-muted-foreground">
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <p>Loading favorites...</p>
+                        </div>
+                      </Card>
+                    ) : favorites.length === 0 ? (
+                      <Card className="flex items-center justify-center p-12 bg-muted/30 border-dashed">
+                        <div className="text-center text-muted-foreground">
+                          <Heart className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                          <p className="text-sm font-medium mb-1">No favorites yet</p>
+                          <p className="text-xs">Save questions from Interview Prep to access them here</p>
+                        </div>
+                      </Card>
+                    ) : (
+                      <div className="space-y-3">
+                        {favorites.map((fav, idx) => {
+                          const q: InterviewQuestion = {
+                            id: idx + 1,
+                            question: fav.question,
+                            difficulty: fav.difficulty as 'easy' | 'medium' | 'hard',
+                            category: fav.category,
+                            whyAsked: fav.why_asked || '',
+                            sampleAnswer: fav.sample_answer || '',
+                            keyPoints: fav.key_points || [],
+                            followUp: fav.follow_up || '',
+                          };
+                          return (
+                            <div key={fav.id} className="relative">
+                              {renderQuestionCard(q, fav.source_topic || undefined, true)}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="absolute top-4 right-14 h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() => removeFavorite.mutate(fav.id)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </TabsContent>
+
+                {/* Insights Tab */}
                 <TabsContent value="insights" className="h-full m-0 p-4 flex flex-col">
                   <div className="mb-4 flex-shrink-0">
                     <p className="text-sm text-muted-foreground mb-3">
