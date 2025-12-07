@@ -44,6 +44,48 @@ export type Database = {
           },
         ]
       }
+      favorite_questions: {
+        Row: {
+          category: string
+          created_at: string
+          difficulty: string
+          follow_up: string | null
+          id: string
+          key_points: string[] | null
+          question: string
+          sample_answer: string | null
+          source_topic: string | null
+          user_id: string
+          why_asked: string | null
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          difficulty: string
+          follow_up?: string | null
+          id?: string
+          key_points?: string[] | null
+          question: string
+          sample_answer?: string | null
+          source_topic?: string | null
+          user_id: string
+          why_asked?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          difficulty?: string
+          follow_up?: string | null
+          id?: string
+          key_points?: string[] | null
+          question?: string
+          sample_answer?: string | null
+          source_topic?: string | null
+          user_id?: string
+          why_asked?: string | null
+        }
+        Relationships: []
+      }
       learning_entries: {
         Row: {
           content: string | null
