@@ -47,17 +47,35 @@ User's question: ${query}
 
 Please search through the entries and provide a helpful answer.`;
     } else if (action === 'interview-prep') {
-      systemPrompt = `You are an expert interview coach. Based on the user's learning entries, generate relevant interview questions and provide guidance on how to answer them effectively.
+      systemPrompt = `You are a senior technical interviewer and career coach with 15+ years of experience at top tech companies. Your job is to generate realistic, challenging interview questions based on the user's learning entries and provide comprehensive answers they can study.
 
-For each question:
-1. State the question clearly
-2. Explain why this might be asked
-3. Provide a suggested answer structure based on the user's knowledge
-4. Include tips for delivering a strong response
+IMPORTANT: You MUST respond with a valid JSON object. Do not include any text before or after the JSON.
 
-Generate 5-7 relevant interview questions based on the content.`;
+Generate 6-8 interview questions with the following structure:
+{
+  "questions": [
+    {
+      "id": 1,
+      "question": "The interview question",
+      "difficulty": "easy" | "medium" | "hard",
+      "category": "Technical" | "Behavioral" | "System Design" | "Problem Solving",
+      "whyAsked": "Brief explanation of why interviewers ask this",
+      "sampleAnswer": "A comprehensive sample answer the candidate can study (2-4 paragraphs)",
+      "keyPoints": ["Key point 1", "Key point 2", "Key point 3"],
+      "followUp": "A potential follow-up question the interviewer might ask"
+    }
+  ],
+  "studyTips": ["Tip 1", "Tip 2", "Tip 3"],
+  "topicsIdentified": ["Topic 1", "Topic 2"]
+}
 
-      userPrompt = `Here are the user's learning entries to base interview questions on:
+Make questions:
+- Directly relevant to the user's actual learning entries
+- Progressive in difficulty (mix of easy, medium, hard)
+- Include both theoretical and practical questions
+- Reference specific concepts from their notes when providing answers`;
+
+      userPrompt = `Based on these learning entries, generate interview questions with detailed answers:
 
 ${entries.map((e: any, i: number) => `
 Entry ${i + 1}: "${e.title}"
@@ -66,9 +84,9 @@ Content: ${e.content || e.summary || 'No content'}
 Tags: ${e.tags?.map((t: any) => t.name).join(', ') || 'No tags'}
 ---`).join('\n')}
 
-${query ? `Focus area: ${query}` : 'Generate general interview questions based on all topics.'}
+${query ? `Focus specifically on: ${query}` : 'Cover all topics from the learning entries.'}
 
-Please generate interview questions and preparation guidance.`;
+Respond ONLY with the JSON object, no additional text.`;
     } else if (action === 'insights') {
       systemPrompt = `You are a learning analytics expert. Analyze the user's learning patterns and provide actionable insights to help them learn more effectively.
 

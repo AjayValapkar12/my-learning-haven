@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -7,7 +7,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { useAIAssistant } from '@/hooks/useAIAssistant';
 import { useLearningEntries } from '@/hooks/useLearningEntries';
-import { Sparkles, Search, GraduationCap, Lightbulb, Loader2, X, Brain, BookOpen, AlertCircle } from 'lucide-react';
+import { useTopics } from '@/hooks/useTopics';
+import { Sparkles, Search, GraduationCap, Lightbulb, Loader2, X, Brain, BookOpen, AlertCircle, ChevronDown, ChevronUp, CheckCircle2, Target, MessageSquare, Zap } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 interface AIAssistantPanelProps {
@@ -15,10 +16,29 @@ interface AIAssistantPanelProps {
   onClose: () => void;
 }
 
+interface InterviewQuestion {
+  id: number;
+  question: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  category: string;
+  whyAsked: string;
+  sampleAnswer: string;
+  keyPoints: string[];
+  followUp: string;
+}
+
+interface InterviewResponse {
+  questions: InterviewQuestion[];
+  studyTips: string[];
+  topicsIdentified: string[];
+}
+
 export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [interviewTopic, setInterviewTopic] = useState('');
+  const [expandedQuestions, setExpandedQuestions] = useState<Set<number>>(new Set());
   const { data: entries = [] } = useLearningEntries();
+  const { data: topics = [] } = useTopics();
   const { isLoading, response, error, smartSearch, getInterviewPrep, getInsights, reset } = useAIAssistant({ entries });
 
   const handleSearch = (e: React.FormEvent) => {
@@ -30,12 +50,62 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
 
   const handleInterviewPrep = (e: React.FormEvent) => {
     e.preventDefault();
+    setExpandedQuestions(new Set());
     getInterviewPrep(interviewTopic);
   };
+
+  const handleTopicClick = (topicName: string) => {
+    setInterviewTopic(topicName);
+    setExpandedQuestions(new Set());
+    getInterviewPrep(topicName);
+  };
+
+  const toggleQuestion = (id: number) => {
+    setExpandedQuestions(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const parsedInterviewResponse = useMemo((): InterviewResponse | null => {
+    if (!response) return null;
+    try {
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }, [response]);
 
   if (!isOpen) return null;
 
   const hasEntries = entries.length > 0;
+
+  const getDifficultyColor = (difficulty: string) => {
+    switch (difficulty) {
+      case 'easy': return 'bg-green-500/10 text-green-600 border-green-500/30';
+      case 'medium': return 'bg-amber-500/10 text-amber-600 border-amber-500/30';
+      case 'hard': return 'bg-red-500/10 text-red-600 border-red-500/30';
+      default: return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  const getCategoryIcon = (category: string) => {
+    switch (category.toLowerCase()) {
+      case 'technical': return <Zap className="w-3 h-3" />;
+      case 'behavioral': return <MessageSquare className="w-3 h-3" />;
+      case 'system design': return <Target className="w-3 h-3" />;
+      default: return <Brain className="w-3 h-3" />;
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm">
@@ -73,7 +143,7 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
               </Card>
             </div>
           ) : (
-            <Tabs defaultValue="search" className="flex-1 flex flex-col overflow-hidden">
+            <Tabs defaultValue="interview" className="flex-1 flex flex-col overflow-hidden">
               <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent p-0 h-auto flex-shrink-0">
                 <TabsTrigger 
                   value="search" 
@@ -117,25 +187,222 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                   <AIResponseArea response={response} error={error} isLoading={isLoading} type="search" />
                 </TabsContent>
 
-                <TabsContent value="interview" className="h-full m-0 p-4 flex flex-col">
-                  <div className="mb-4 flex-shrink-0">
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Generate interview questions based on your learning entries. Optionally focus on a specific topic.
-                    </p>
-                    <form onSubmit={handleInterviewPrep} className="flex gap-2">
-                      <Input
-                        placeholder="e.g., React hooks, System design, JavaScript..."
-                        value={interviewTopic}
-                        onChange={(e) => setInterviewTopic(e.target.value)}
-                        className="flex-1"
-                      />
-                      <Button type="submit" disabled={isLoading}>
-                        {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GraduationCap className="w-4 h-4" />}
-                        <span className="ml-2">Generate</span>
-                      </Button>
-                    </form>
+                <TabsContent value="interview" className="h-full m-0 flex flex-col overflow-hidden">
+                  <div className="p-4 border-b border-border flex-shrink-0 space-y-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Generate tailored interview questions with answers based on your learning. Click a topic or search for specific areas.
+                      </p>
+                      
+                      {/* Topic Pills */}
+                      {topics.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {topics.map((topic) => (
+                            <Button
+                              key={topic.id}
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleTopicClick(topic.name)}
+                              disabled={isLoading}
+                              className="h-7 text-xs"
+                              style={{ 
+                                borderColor: topic.color || undefined,
+                                color: topic.color || undefined
+                              }}
+                            >
+                              {topic.name}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+                      
+                      <form onSubmit={handleInterviewPrep} className="flex gap-2">
+                        <Input
+                          placeholder="Search: React hooks, System design, APIs..."
+                          value={interviewTopic}
+                          onChange={(e) => setInterviewTopic(e.target.value)}
+                          className="flex-1"
+                        />
+                        <Button type="submit" disabled={isLoading}>
+                          {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GraduationCap className="w-4 h-4" />}
+                          <span className="ml-2 hidden sm:inline">Generate</span>
+                        </Button>
+                      </form>
+                    </div>
                   </div>
-                  <AIResponseArea response={response} error={error} isLoading={isLoading} type="interview" />
+                  
+                  <ScrollArea className="flex-1 p-4">
+                    {error && (
+                      <Card className="p-4 bg-destructive/5 border-destructive/20 mb-4">
+                        <div className="flex items-start gap-3">
+                          <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-destructive font-medium text-sm">Something went wrong</p>
+                            <p className="text-destructive/80 text-sm mt-1">{error}</p>
+                          </div>
+                        </div>
+                      </Card>
+                    )}
+                    
+                    {!response && !isLoading && !error && (
+                      <Card className="flex items-center justify-center p-12 bg-muted/30 border-dashed">
+                        <div className="text-center text-muted-foreground">
+                          <GraduationCap className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                          <p className="text-sm font-medium mb-1">Ready to practice?</p>
+                          <p className="text-xs">Click a topic or type to generate interview questions</p>
+                        </div>
+                      </Card>
+                    )}
+                    
+                    {isLoading && !parsedInterviewResponse && (
+                      <Card className="p-6 bg-secondary/30">
+                        <div className="flex items-center gap-3 text-muted-foreground">
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <div>
+                            <p className="font-medium">Generating interview questions...</p>
+                            <p className="text-xs">Analyzing your learning entries</p>
+                          </div>
+                        </div>
+                      </Card>
+                    )}
+                    
+                    {parsedInterviewResponse && (
+                      <div className="space-y-4">
+                        {/* Topics & Tips Summary */}
+                        {parsedInterviewResponse.topicsIdentified?.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {parsedInterviewResponse.topicsIdentified.map((topic, idx) => (
+                              <Badge key={idx} variant="secondary" className="text-xs">
+                                {topic}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Questions */}
+                        <div className="space-y-3">
+                          {parsedInterviewResponse.questions.map((q) => (
+                            <Card 
+                              key={q.id} 
+                              className="overflow-hidden border-border/50 hover:border-border transition-colors"
+                            >
+                              <button
+                                onClick={() => toggleQuestion(q.id)}
+                                className="w-full p-4 text-left flex items-start gap-3 hover:bg-muted/30 transition-colors"
+                              >
+                                <div className="flex-shrink-0 mt-0.5">
+                                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
+                                    {q.id}
+                                  </div>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                    <Badge variant="outline" className={`text-[10px] ${getDifficultyColor(q.difficulty)}`}>
+                                      {q.difficulty.toUpperCase()}
+                                    </Badge>
+                                    <Badge variant="outline" className="text-[10px] flex items-center gap-1">
+                                      {getCategoryIcon(q.category)}
+                                      {q.category}
+                                    </Badge>
+                                  </div>
+                                  <p className="font-medium text-foreground text-sm leading-relaxed">
+                                    {q.question}
+                                  </p>
+                                </div>
+                                <div className="flex-shrink-0">
+                                  {expandedQuestions.has(q.id) ? (
+                                    <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                                  )}
+                                </div>
+                              </button>
+                              
+                              {expandedQuestions.has(q.id) && (
+                                <div className="px-4 pb-4 pt-0 border-t border-border/50 bg-muted/20">
+                                  <div className="pl-9 space-y-4 pt-4">
+                                    {/* Why Asked */}
+                                    <div>
+                                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                                        Why Interviewers Ask This
+                                      </p>
+                                      <p className="text-sm text-foreground/80">{q.whyAsked}</p>
+                                    </div>
+                                    
+                                    {/* Sample Answer */}
+                                    <div>
+                                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                                        Sample Answer
+                                      </p>
+                                      <div className="bg-background/50 rounded-lg p-3 border border-border/50">
+                                        <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-line">
+                                          {q.sampleAnswer}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Key Points */}
+                                    {q.keyPoints?.length > 0 && (
+                                      <div>
+                                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                                          Key Points to Remember
+                                        </p>
+                                        <ul className="space-y-1.5">
+                                          {q.keyPoints.map((point, idx) => (
+                                            <li key={idx} className="flex items-start gap-2 text-sm">
+                                              <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+                                              <span className="text-foreground/80">{point}</span>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                    
+                                    {/* Follow-up */}
+                                    {q.followUp && (
+                                      <div className="bg-amber-500/5 rounded-lg p-3 border border-amber-500/20">
+                                        <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-1">
+                                          Possible Follow-up
+                                        </p>
+                                        <p className="text-sm text-foreground/80">{q.followUp}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </Card>
+                          ))}
+                        </div>
+                        
+                        {/* Study Tips */}
+                        {parsedInterviewResponse.studyTips?.length > 0 && (
+                          <Card className="p-4 bg-primary/5 border-primary/20">
+                            <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-3 flex items-center gap-2">
+                              <Sparkles className="w-4 h-4" />
+                              Study Tips
+                            </p>
+                            <ul className="space-y-2">
+                              {parsedInterviewResponse.studyTips.map((tip, idx) => (
+                                <li key={idx} className="flex items-start gap-2 text-sm">
+                                  <span className="text-primary font-medium">{idx + 1}.</span>
+                                  <span className="text-foreground/80">{tip}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </Card>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Fallback to markdown if JSON parsing fails */}
+                    {response && !parsedInterviewResponse && !isLoading && (
+                      <Card className="p-5 bg-secondary/30">
+                        <div className="prose prose-sm max-w-none dark:prose-invert">
+                          <ReactMarkdown>{response}</ReactMarkdown>
+                        </div>
+                      </Card>
+                    )}
+                  </ScrollArea>
                 </TabsContent>
 
                 <TabsContent value="insights" className="h-full m-0 p-4 flex flex-col">
