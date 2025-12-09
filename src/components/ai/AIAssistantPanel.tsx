@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -32,12 +32,6 @@ interface InterviewQuestion {
   followUp: string;
 }
 
-interface InterviewResponse {
-  questions: InterviewQuestion[];
-  studyTips: string[];
-  topicsIdentified: string[];
-}
-
 export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [interviewTopic, setInterviewTopic] = useState('');
@@ -45,7 +39,7 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
   const [activeTab, setActiveTab] = useState('interview');
   const { data: entries = [] } = useLearningEntries();
   const { data: topics = [] } = useTopics();
-  const { isLoading, response, error, smartSearch, getInterviewPrep, getInsights, reset } = useAIAssistant({ entries });
+  const { isLoading, response, interviewData, error, smartSearch, getInterviewPrep, getInsights, reset } = useAIAssistant({ entries });
   const { favorites, addFavorite, removeFavorite, isFavorite, getFavoriteId, isLoading: favoritesLoading } = useFavoriteQuestions();
 
   const handleSearch = (e: React.FormEvent) => {
@@ -99,25 +93,6 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
     }
   };
 
-  const parsedInterviewResponse = useMemo((): InterviewResponse | null => {
-    if (!response) return null;
-    try {
-      // Try to extract JSON from the response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        // Validate the structure
-        if (parsed.questions && Array.isArray(parsed.questions)) {
-          return parsed;
-        }
-      }
-      return null;
-    } catch (e) {
-      console.log('JSON parse error, response may still be streaming:', e);
-      return null;
-    }
-  }, [response]);
-
   if (!isOpen) return null;
 
   const hasEntries = entries.length > 0;
@@ -140,7 +115,7 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
     }
   };
 
-  const renderQuestionCard = (q: InterviewQuestion, sourceTopic?: string, isFav = false) => {
+  const renderQuestionCard = (q: InterviewQuestion, sourceTopic?: string) => {
     const isExpanded = expandedQuestions.has(q.id);
     const favorited = isFavorite(q.question);
 
@@ -206,7 +181,6 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
         {isExpanded && (
           <div className="px-4 pb-4 pt-0 border-t border-border/50 bg-muted/20">
             <div className="pl-9 space-y-4 pt-4">
-              {/* Why Asked */}
               {q.whyAsked && (
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
@@ -216,7 +190,6 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                 </div>
               )}
               
-              {/* Sample Answer */}
               {q.sampleAnswer && (
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -230,8 +203,7 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                 </div>
               )}
               
-              {/* Key Points */}
-              {q.keyPoints?.length > 0 && (
+              {q.keyPoints && q.keyPoints.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                     Key Points to Remember
@@ -247,7 +219,6 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                 </div>
               )}
               
-              {/* Follow-up */}
               {q.followUp && (
                 <div className="bg-amber-500/5 rounded-lg p-3 border border-amber-500/20">
                   <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-1">
@@ -260,6 +231,72 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
           </div>
         )}
       </Card>
+    );
+  };
+
+  const AIResponseArea = ({ type }: { type: 'search' | 'insights' }) => {
+    if (error) {
+      return (
+        <Card className="p-4 bg-destructive/5 border-destructive/20">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-destructive font-medium text-sm">Something went wrong</p>
+              <p className="text-destructive/80 text-sm mt-1">{error}</p>
+            </div>
+          </div>
+        </Card>
+      );
+    }
+
+    if (isLoading) {
+      return (
+        <Card className="p-6 bg-secondary/30">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <p>
+              {type === 'search' ? 'Searching through your learnings...' : 'Analyzing your learning patterns...'}
+            </p>
+          </div>
+          {response && (
+            <div className="mt-4 prose prose-sm max-w-none dark:prose-invert">
+              <ReactMarkdown>{response}</ReactMarkdown>
+            </div>
+          )}
+        </Card>
+      );
+    }
+
+    if (!response) {
+      return (
+        <Card className="flex-1 flex items-center justify-center p-12 bg-muted/30 border-dashed">
+          <div className="text-center text-muted-foreground">
+            {type === 'search' ? (
+              <>
+                <Search className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                <p className="text-sm font-medium mb-1">Search your knowledge</p>
+                <p className="text-xs">Ask questions about anything you've learned</p>
+              </>
+            ) : (
+              <>
+                <Lightbulb className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                <p className="text-sm font-medium mb-1">Get personalized insights</p>
+                <p className="text-xs">Click the button above to analyze your learning patterns</p>
+              </>
+            )}
+          </div>
+        </Card>
+      );
+    }
+
+    return (
+      <ScrollArea className="flex-1">
+        <Card className="p-5 bg-secondary/30">
+          <div className="prose prose-sm max-w-none dark:prose-invert">
+            <ReactMarkdown>{response}</ReactMarkdown>
+          </div>
+        </Card>
+      </ScrollArea>
     );
   };
 
@@ -350,7 +387,7 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                       {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                     </Button>
                   </form>
-                  <AIResponseArea response={response} error={error} isLoading={isLoading} type="search" />
+                  <AIResponseArea type="search" />
                 </TabsContent>
 
                 {/* Interview Prep Tab */}
@@ -361,7 +398,6 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                         Generate tailored interview questions with answers based on your learning. Click a topic or search for specific areas.
                       </p>
                       
-                      {/* Topic Pills */}
                       {topics.length > 0 && (
                         <div className="flex flex-wrap gap-2 mb-3">
                           {topics.map((topic) => (
@@ -411,7 +447,7 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                       </Card>
                     )}
                     
-                    {!response && !isLoading && !error && (
+                    {!interviewData && !isLoading && !error && (
                       <Card className="flex items-center justify-center p-12 bg-muted/30 border-dashed">
                         <div className="text-center text-muted-foreground">
                           <GraduationCap className="w-10 h-10 mx-auto mb-3 opacity-50" />
@@ -430,20 +466,14 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                             <p className="text-xs">Analyzing your learning entries</p>
                           </div>
                         </div>
-                        {response && (
-                          <div className="mt-4 text-xs text-muted-foreground/70 font-mono max-h-20 overflow-hidden">
-                            {response.substring(0, 200)}...
-                          </div>
-                        )}
                       </Card>
                     )}
                     
-                    {parsedInterviewResponse && !isLoading && (
+                    {interviewData && !isLoading && (
                       <div className="space-y-4">
-                        {/* Topics & Tips Summary */}
-                        {parsedInterviewResponse.topicsIdentified?.length > 0 && (
+                        {interviewData.topicsIdentified && interviewData.topicsIdentified.length > 0 && (
                           <div className="flex flex-wrap gap-2 mb-2">
-                            {parsedInterviewResponse.topicsIdentified.map((topic, idx) => (
+                            {interviewData.topicsIdentified.map((topic, idx) => (
                               <Badge key={idx} variant="secondary" className="text-xs">
                                 {topic}
                               </Badge>
@@ -451,20 +481,18 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                           </div>
                         )}
                         
-                        {/* Questions */}
                         <div className="space-y-3">
-                          {parsedInterviewResponse.questions.map((q) => renderQuestionCard(q, interviewTopic))}
+                          {interviewData.questions.map((q) => renderQuestionCard(q, interviewTopic))}
                         </div>
                         
-                        {/* Study Tips */}
-                        {parsedInterviewResponse.studyTips?.length > 0 && (
+                        {interviewData.studyTips && interviewData.studyTips.length > 0 && (
                           <Card className="p-4 bg-primary/5 border-primary/20">
                             <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-3 flex items-center gap-2">
                               <Sparkles className="w-4 h-4" />
                               Study Tips
                             </p>
                             <ul className="space-y-2">
-                              {parsedInterviewResponse.studyTips.map((tip, idx) => (
+                              {interviewData.studyTips.map((tip, idx) => (
                                 <li key={idx} className="flex items-start gap-2 text-sm">
                                   <span className="text-primary font-medium">{idx + 1}.</span>
                                   <span className="text-foreground/80">{tip}</span>
@@ -474,15 +502,6 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                           </Card>
                         )}
                       </div>
-                    )}
-                    
-                    {/* Fallback to markdown if JSON parsing fails and not loading */}
-                    {response && !parsedInterviewResponse && !isLoading && (
-                      <Card className="p-5 bg-secondary/30">
-                        <div className="prose prose-sm max-w-none dark:prose-invert">
-                          <ReactMarkdown>{response}</ReactMarkdown>
-                        </div>
-                      </Card>
                     )}
                   </ScrollArea>
                 </TabsContent>
@@ -526,7 +545,7 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                           };
                           return (
                             <div key={fav.id} className="relative">
-                              {renderQuestionCard(q, fav.source_topic || undefined, true)}
+                              {renderQuestionCard(q, fav.source_topic || undefined)}
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -549,16 +568,12 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                     <p className="text-sm text-muted-foreground mb-3">
                       Get AI-powered insights about your learning patterns, knowledge gaps, and suggestions for improvement.
                     </p>
-                    <Button onClick={() => getInsights()} disabled={isLoading} className="w-full">
-                      {isLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      ) : (
-                        <Sparkles className="w-4 h-4 mr-2" />
-                      )}
-                      Analyze My Learning Patterns
+                    <Button onClick={() => getInsights()} disabled={isLoading} className="w-full sm:w-auto">
+                      {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lightbulb className="w-4 h-4 mr-2" />}
+                      Generate Insights
                     </Button>
                   </div>
-                  <AIResponseArea response={response} error={error} isLoading={isLoading} type="insights" />
+                  <AIResponseArea type="insights" />
                 </TabsContent>
               </div>
             </Tabs>
@@ -566,89 +581,5 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
         </div>
       </div>
     </div>
-  );
-}
-
-function AIResponseArea({ 
-  response, 
-  error, 
-  isLoading,
-  type 
-}: { 
-  response: string; 
-  error: string | null; 
-  isLoading: boolean;
-  type: 'search' | 'interview' | 'insights';
-}) {
-  const placeholderText = {
-    search: 'Search results will appear here',
-    interview: 'Interview questions will be generated here',
-    insights: 'Your learning insights will appear here'
-  };
-
-  if (error) {
-    return (
-      <Card className="flex-1 p-4 bg-destructive/5 border-destructive/20">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-destructive font-medium text-sm">Something went wrong</p>
-            <p className="text-destructive/80 text-sm mt-1">{error}</p>
-          </div>
-        </div>
-      </Card>
-    );
-  }
-
-  if (!response && !isLoading) {
-    return (
-      <Card className="flex-1 flex items-center justify-center p-8 bg-muted/30 border-dashed">
-        <div className="text-center text-muted-foreground">
-          <Sparkles className="w-8 h-8 mx-auto mb-3 opacity-50" />
-          <p className="text-sm">{placeholderText[type]}</p>
-        </div>
-      </Card>
-    );
-  }
-
-  return (
-    <ScrollArea className="flex-1 min-h-0">
-      <Card className="p-5 bg-secondary/30">
-        {response ? (
-          <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-serif prose-headings:text-foreground prose-p:text-foreground/90 prose-strong:text-foreground prose-li:text-foreground/90">
-            <ReactMarkdown
-              components={{
-                h1: ({ children }) => <h1 className="text-xl font-serif font-semibold mb-4 mt-2">{children}</h1>,
-                h2: ({ children }) => <h2 className="text-lg font-serif font-semibold mb-3 mt-4">{children}</h2>,
-                h3: ({ children }) => <h3 className="text-base font-serif font-medium mb-2 mt-3">{children}</h3>,
-                p: ({ children }) => <p className="mb-3 leading-relaxed">{children}</p>,
-                ul: ({ children }) => <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>,
-                ol: ({ children }) => <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>,
-                li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-                strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-                code: ({ children }) => (
-                  <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">{children}</code>
-                ),
-                pre: ({ children }) => (
-                  <pre className="bg-muted p-3 rounded-lg overflow-x-auto mb-3 text-sm">{children}</pre>
-                ),
-                blockquote: ({ children }) => (
-                  <blockquote className="border-l-2 border-primary/50 pl-4 italic text-muted-foreground mb-3">
-                    {children}
-                  </blockquote>
-                ),
-              }}
-            >
-              {response}
-            </ReactMarkdown>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span>AI is thinking...</span>
-          </div>
-        )}
-      </Card>
-    </ScrollArea>
   );
 }
