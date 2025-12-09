@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { LearningEntry } from '@/types/learning';
+import { toast } from 'sonner';
 
 interface UseAIAssistantOptions {
   entries: LearningEntry[];
@@ -27,12 +28,19 @@ export function useAIAssistant({ entries }: UseAIAssistantOptions) {
   const [error, setError] = useState<string | null>(null);
 
   const callAI = async (action: 'smart-search' | 'interview-prep' | 'insights', query?: string) => {
+    if (entries.length === 0) {
+      setError('Please add some learning entries first');
+      return;
+    }
+
     setIsLoading(true);
     setResponse('');
     setInterviewData(null);
     setError(null);
 
     try {
+      console.log(`[AI Assistant] Calling ${action} with query:`, query);
+      
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-assistant`, {
         method: 'POST',
         headers: {
@@ -55,19 +63,29 @@ export function useAIAssistant({ entries }: UseAIAssistantOptions) {
         }),
       });
 
+      console.log(`[AI Assistant] Response status:`, resp.status);
+
       if (!resp.ok) {
-        const errorData = await resp.json();
-        throw new Error(errorData.error || 'Failed to get AI response');
+        let errorMessage = 'Failed to get AI response';
+        try {
+          const errorData = await resp.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          // Response might not be JSON
+        }
+        throw new Error(errorMessage);
       }
 
       // For interview-prep, we get JSON directly (not streaming)
       if (action === 'interview-prep') {
         const data = await resp.json();
-        console.log('Interview prep data received:', data);
+        console.log('[AI Assistant] Interview prep data received:', data);
         
         if (data.questions && Array.isArray(data.questions)) {
           setInterviewData(data);
+          toast.success(`Generated ${data.questions.length} interview questions!`);
         } else {
+          console.error('[AI Assistant] Invalid data format:', data);
           throw new Error('Invalid interview data format');
         }
       } else {
@@ -114,7 +132,8 @@ export function useAIAssistant({ entries }: UseAIAssistantOptions) {
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'An error occurred';
       setError(errorMessage);
-      console.error('AI Assistant error:', e);
+      toast.error(errorMessage);
+      console.error('[AI Assistant] Error:', e);
     } finally {
       setIsLoading(false);
     }
