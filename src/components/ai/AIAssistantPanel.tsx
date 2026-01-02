@@ -140,7 +140,18 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
         key={q.id} 
         className="overflow-hidden border-border/50 hover:border-border transition-colors"
       >
-        <div className="w-full p-4 text-left flex items-start gap-3">
+        <div
+          className="w-full p-4 text-left flex items-start gap-3 cursor-pointer"
+          role="button"
+          tabIndex={0}
+          onClick={() => toggleQuestion(q.id)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              toggleQuestion(q.id);
+            }
+          }}
+        >
           <div className="flex-shrink-0 mt-0.5">
             <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
               {q.id}
@@ -183,7 +194,10 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
               variant="ghost"
               size="icon"
               className="h-8 w-8"
-              onClick={() => toggleQuestion(q.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleQuestion(q.id);
+              }}
             >
               {isExpanded ? (
                 <ChevronUp className="w-4 h-4 text-muted-foreground" />
@@ -457,94 +471,96 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                         />
                         <Button type="submit" disabled={isLoading}>
                           {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                          <span className="ml-2 hidden sm:inline">Generate</span>
+                          <span className="ml-2">Generate Questions</span>
                         </Button>
                       </form>
                     </div>
                   </div>
                   
-                  <ScrollArea className="flex-1 p-4">
-                    {error && (
-                      <Card className="p-4 bg-destructive/5 border-destructive/20 mb-4">
-                        <div className="flex items-start gap-3">
-                          <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-destructive font-medium text-sm">Something went wrong</p>
-                            <p className="text-destructive/80 text-sm mt-1">{error}</p>
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="mt-2"
-                              onClick={() => getInterviewPrep(interviewTopic)}
-                            >
-                              Try Again
+                  <ScrollArea className="flex-1">
+                    <div className="p-4">
+                      {error && (
+                        <Card className="p-4 bg-destructive/5 border-destructive/20 mb-4">
+                          <div className="flex items-start gap-3">
+                            <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-destructive font-medium text-sm">Something went wrong</p>
+                              <p className="text-destructive/80 text-sm mt-1">{error}</p>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="mt-2"
+                                onClick={() => getInterviewPrep(interviewTopic)}
+                              >
+                                Try Again
+                              </Button>
+                            </div>
+                          </div>
+                        </Card>
+                      )}
+                      
+                      {isLoading && (
+                        <Card className="p-6 bg-secondary/30">
+                          <div className="flex items-center gap-3 text-muted-foreground">
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <div>
+                              <p className="font-medium">Generating interview questions...</p>
+                              <p className="text-xs">Analyzing your {entries.length} learning entries</p>
+                            </div>
+                          </div>
+                        </Card>
+                      )}
+                      
+                      {interviewData && !isLoading && (
+                        <div className="space-y-4">
+                          {interviewData.topicsIdentified && interviewData.topicsIdentified.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mb-2">
+                              <span className="text-xs text-muted-foreground mr-1">Topics covered:</span>
+                              {interviewData.topicsIdentified.map((topic, idx) => (
+                                <Badge key={idx} variant="secondary" className="text-xs">
+                                  {topic}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                          
+                          <div className="space-y-3">
+                            {interviewData.questions.map((q) => renderQuestionCard(q, interviewTopic))}
+                          </div>
+                          
+                          {interviewData.studyTips && interviewData.studyTips.length > 0 && (
+                            <Card className="p-4 bg-primary/5 border-primary/20">
+                              <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-3 flex items-center gap-2">
+                                <Sparkles className="w-4 h-4" />
+                                Study Tips
+                              </p>
+                              <ul className="space-y-2">
+                                {interviewData.studyTips.map((tip, idx) => (
+                                  <li key={idx} className="flex items-start gap-2 text-sm">
+                                    <span className="text-primary font-medium">{idx + 1}.</span>
+                                    <span className="text-foreground/80">{tip}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </Card>
+                          )}
+                        </div>
+                      )}
+                      
+                      {!interviewData && !isLoading && !error && (
+                        <Card className="flex items-center justify-center p-12 bg-muted/30 border-dashed">
+                          <div className="text-center text-muted-foreground">
+                            <GraduationCap className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                            <p className="text-sm font-medium mb-1">Ready to practice?</p>
+                            <p className="text-xs mb-4">Click a topic above or generate questions for all your learning</p>
+                            <Button onClick={() => getInterviewPrep()} size="sm">
+                              <Sparkles className="w-4 h-4 mr-2" />
+                              Generate Questions
                             </Button>
                           </div>
-                        </div>
-                      </Card>
-                    )}
-                    
-                    {isLoading && (
-                      <Card className="p-6 bg-secondary/30">
-                        <div className="flex items-center gap-3 text-muted-foreground">
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          <div>
-                            <p className="font-medium">Generating interview questions...</p>
-                            <p className="text-xs">Analyzing your {entries.length} learning entries</p>
-                          </div>
-                        </div>
-                      </Card>
-                    )}
-                    
-                    {interviewData && !isLoading && (
-                      <div className="space-y-4">
-                        {interviewData.topicsIdentified && interviewData.topicsIdentified.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mb-2">
-                            <span className="text-xs text-muted-foreground mr-1">Topics covered:</span>
-                            {interviewData.topicsIdentified.map((topic, idx) => (
-                              <Badge key={idx} variant="secondary" className="text-xs">
-                                {topic}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                        
-                        <div className="space-y-3">
-                          {interviewData.questions.map((q) => renderQuestionCard(q, interviewTopic))}
-                        </div>
-                        
-                        {interviewData.studyTips && interviewData.studyTips.length > 0 && (
-                          <Card className="p-4 bg-primary/5 border-primary/20">
-                            <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-3 flex items-center gap-2">
-                              <Sparkles className="w-4 h-4" />
-                              Study Tips
-                            </p>
-                            <ul className="space-y-2">
-                              {interviewData.studyTips.map((tip, idx) => (
-                                <li key={idx} className="flex items-start gap-2 text-sm">
-                                  <span className="text-primary font-medium">{idx + 1}.</span>
-                                  <span className="text-foreground/80">{tip}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </Card>
-                        )}
-                      </div>
-                    )}
-                    
-                    {!interviewData && !isLoading && !error && (
-                      <Card className="flex items-center justify-center p-12 bg-muted/30 border-dashed">
-                        <div className="text-center text-muted-foreground">
-                          <GraduationCap className="w-10 h-10 mx-auto mb-3 opacity-50" />
-                          <p className="text-sm font-medium mb-1">Ready to practice?</p>
-                          <p className="text-xs mb-4">Click a topic above or generate questions for all your learning</p>
-                          <Button onClick={() => getInterviewPrep()} size="sm">
-                            <Sparkles className="w-4 h-4 mr-2" />
-                            Generate Questions
-                          </Button>
-                        </div>
-                      </Card>
-                    )}
+                        </Card>
+                      )}
+                    </div>
                   </ScrollArea>
                 </TabsContent>
 
@@ -556,51 +572,53 @@ export function AIAssistantPanel({ isOpen, onClose }: AIAssistantPanelProps) {
                     </p>
                   </div>
                   
-                  <ScrollArea className="flex-1 p-4">
-                    {favoritesLoading ? (
-                      <Card className="p-6 bg-secondary/30">
-                        <div className="flex items-center gap-3 text-muted-foreground">
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          <p>Loading favorites...</p>
+                  <ScrollArea className="flex-1">
+                    <div className="p-4">
+                      {favoritesLoading ? (
+                        <Card className="p-6 bg-secondary/30">
+                          <div className="flex items-center gap-3 text-muted-foreground">
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <p>Loading favorites...</p>
+                          </div>
+                        </Card>
+                      ) : favorites.length === 0 ? (
+                        <Card className="flex items-center justify-center p-12 bg-muted/30 border-dashed">
+                          <div className="text-center text-muted-foreground">
+                            <Heart className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                            <p className="text-sm font-medium mb-1">No favorites yet</p>
+                            <p className="text-xs">Save questions from Interview Prep to access them here</p>
+                          </div>
+                        </Card>
+                      ) : (
+                        <div className="space-y-3">
+                          {favorites.map((fav, idx) => {
+                            const q: InterviewQuestion = {
+                              id: idx + 1,
+                              question: fav.question,
+                              difficulty: fav.difficulty as 'easy' | 'medium' | 'hard',
+                              category: fav.category,
+                              whyAsked: fav.why_asked || '',
+                              sampleAnswer: fav.sample_answer || '',
+                              keyPoints: fav.key_points || [],
+                              followUp: fav.follow_up || '',
+                            };
+                            return (
+                              <div key={fav.id} className="relative">
+                                {renderQuestionCard(q, fav.source_topic || undefined)}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="absolute top-4 right-14 h-8 w-8 text-muted-foreground hover:text-destructive"
+                                  onClick={() => removeFavorite.mutate(fav.id)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            );
+                          })}
                         </div>
-                      </Card>
-                    ) : favorites.length === 0 ? (
-                      <Card className="flex items-center justify-center p-12 bg-muted/30 border-dashed">
-                        <div className="text-center text-muted-foreground">
-                          <Heart className="w-10 h-10 mx-auto mb-3 opacity-50" />
-                          <p className="text-sm font-medium mb-1">No favorites yet</p>
-                          <p className="text-xs">Save questions from Interview Prep to access them here</p>
-                        </div>
-                      </Card>
-                    ) : (
-                      <div className="space-y-3">
-                        {favorites.map((fav, idx) => {
-                          const q: InterviewQuestion = {
-                            id: idx + 1,
-                            question: fav.question,
-                            difficulty: fav.difficulty as 'easy' | 'medium' | 'hard',
-                            category: fav.category,
-                            whyAsked: fav.why_asked || '',
-                            sampleAnswer: fav.sample_answer || '',
-                            keyPoints: fav.key_points || [],
-                            followUp: fav.follow_up || '',
-                          };
-                          return (
-                            <div key={fav.id} className="relative">
-                              {renderQuestionCard(q, fav.source_topic || undefined)}
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="absolute top-4 right-14 h-8 w-8 text-muted-foreground hover:text-destructive"
-                                onClick={() => removeFavorite.mutate(fav.id)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </ScrollArea>
                 </TabsContent>
 
